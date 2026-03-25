@@ -287,7 +287,8 @@ def get_config():
     # diayn parameters
     parser.add_argument("--num_skills", type=int, default=8,
                         help='number of DIAYN skills')
-    
+    parser.add_argument("--levels", type=int, default=11,
+                        help='number of MATE actions')
     parser.add_argument("--diayn_alpha", type=float, default=0.5,
                         help='diayn_alpha for reward scale')
     return parser

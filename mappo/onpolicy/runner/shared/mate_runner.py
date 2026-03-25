@@ -12,6 +12,8 @@ class MATERunner(Runner):
     """Runner class to perform training, evaluation. and data collection for the MPEs. See parent class for details."""
     def __init__(self, config):
         super(MATERunner, self).__init__(config)
+        print("self.num_skills = ", self.num_skills)
+        print("self.diayn_alpha = ", self.diayn_alpha)
 
     def run(self):
         self.warmup()   
@@ -25,6 +27,8 @@ class MATERunner(Runner):
 
             # Sample skill riêng cho TỪNG thread và cố định suốt episode đó
             skill_ids = np.random.randint(0, self.num_skills, size=(self.n_rollout_threads,))
+            #print("skill_ids = ", skill_ids)
+            #time.sleep(10)
             z_onehot = np.zeros((self.n_rollout_threads, self.num_agents, self.num_skills), dtype=np.float32)
             for i in range(self.n_rollout_threads):
                 z_onehot[i, :, skill_ids[i]] = 1.0
@@ -36,10 +40,9 @@ class MATERunner(Runner):
                 values, actions, action_log_probs, rnn_states, rnn_states_critic, rnn_discriminator_states, actions_env, diayn_reward = self.collect(step)
                 obs, rewards, dones, infos = self.envs.step(actions_env)
                 
-                diayn_reward_reshaped = diayn_reward.reshape(self.n_rollout_threads, 1, 1) # -> [n_threads, 1, 1]
-                diayn_rewards = np.repeat(diayn_reward_reshaped, self.num_agents, axis=1)  # -> [n_threads, num_agents, 1]
-                
+                diayn_rewards = diayn_reward.reshape(self.n_rollout_threads, self.num_agents, 1)                
                 # Cộng extrinsic + intrinsic reward
+                rewards = rewards.reshape(self.n_rollout_threads, self.num_agents, 1)
                 rewards = rewards + self.diayn_alpha * diayn_rewards
                 
                 # Đóng gói data truyền cho hàm insert (thêm discriminator_states và z_onehot)
@@ -74,14 +77,32 @@ class MATERunner(Runner):
 
                 if self.env_name == "MATE":
                     env_infos = {}
+                    
+                    # 1. Khởi tạo danh sách để chứa dữ liệu từ 16 threads
+                    all_thread_coverages = []
+                    
+                    for info in infos:
+                        # Lấy coverage_rate từ dict của mỗi thread
+                        if isinstance(info, dict) and 'coverage_rate' in info:
+                            all_thread_coverages.append(info['coverage_rate'])
+                            
+                    # 2. Đẩy vào env_infos để log ra trung bình của 16 threads
+                    if len(all_thread_coverages) > 0:
+                        env_infos['coverage_rate'] = all_thread_coverages
+
+                    # 3. Log thêm Individual Reward (nếu cần)
                     for agent_id in range(self.num_agents):
                         idv_rews = []
                         for info in infos:
-                            if 'individual_reward' in info[agent_id].keys():
-                                idv_rews.append(info[agent_id]['individual_reward'])
-                        agent_k = 'agent%i/individual_rewards' % agent_id
-                        env_infos[agent_k] = idv_rews
+                            # MATE thường đặt tên key theo dạng 'agent0/individual_reward'
+                            key = f'agent{agent_id}/individual_reward'
+                            if isinstance(info, dict) and key in info:
+                                idv_rews.append(info[key])
+                        
+                        if len(idv_rews) > 0:
+                            env_infos[f'agent{agent_id}/individual_rewards'] = idv_rews
 
+                # Các dòng dưới này phải thẳng hàng với khối "if self.env_name == 'MATE':"
                 train_infos["average_episode_rewards"] = np.mean(self.buffer.rewards) * self.episode_length
                 print("average episode rewards is {}".format(train_infos["average_episode_rewards"]))
                 self.log_train(train_infos, total_num_steps)
@@ -94,13 +115,7 @@ class MATERunner(Runner):
     def warmup(self):
         # reset env
         obs = self.envs.reset()
-
-        # replay buffer
-        if self.use_centralized_V:
-            share_obs = obs.reshape(self.n_rollout_threads, -1)
-            share_obs = np.expand_dims(share_obs, 1).repeat(self.num_agents, axis=1)
-        else:
-            share_obs = obs
+        share_obs = self.envs.get_state()
 
         self.buffer.share_obs[0] = share_obs.copy()
         self.buffer.obs[0] = obs.copy()
@@ -143,7 +158,7 @@ class MATERunner(Runner):
                 else:
                     actions_env = np.concatenate((actions_env, uc_actions_env), axis=2)
         elif self.envs.action_space[0].__class__.__name__ == 'Discrete':
-            actions_env = np.squeeze(np.eye(self.envs.action_space[0].n)[actions], 2)
+            actions_env = np.squeeze(actions, axis=-1)
         else:
             raise NotImplementedError
 
@@ -161,12 +176,7 @@ class MATERunner(Runner):
         masks = np.ones((self.n_rollout_threads, self.num_agents, 1), dtype=np.float32)
         masks[dones == True] = np.zeros(((dones == True).sum(), 1), dtype=np.float32)
 
-        if self.use_centralized_V:
-            share_obs = obs.reshape(self.n_rollout_threads, -1)
-            share_obs = np.expand_dims(share_obs, 1).repeat(self.num_agents, axis=1)
-        else:
-            share_obs = obs
-
+        share_obs = self.envs.get_state()
         # Truyền đúng thứ tự chữ ký hàm trong SharedReplayBuffer.insert(...)
         self.buffer.insert(
             share_obs=share_obs, 
@@ -215,7 +225,7 @@ class MATERunner(Runner):
                     else:
                         eval_actions_env = np.concatenate((eval_actions_env, eval_uc_actions_env), axis=2)
             elif self.eval_envs.action_space[0].__class__.__name__ == 'Discrete':
-                eval_actions_env = np.squeeze(np.eye(self.eval_envs.action_space[0].n)[eval_actions], 2)
+                eval_actions_env = np.squeeze(eval_actions, axis=-1)
             else:
                 raise NotImplementedError
 

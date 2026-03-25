@@ -152,6 +152,11 @@ def worker(remote, parent_remote, env_fn_wrapper):
                     ob = env.reset()
 
             remote.send((ob, reward, done, info))
+
+        elif cmd == 'get_state':
+            state = env.get_state()
+            remote.send(state)
+
         elif cmd == 'reset':
             ob = env.reset()
             remote.send((ob))
@@ -289,6 +294,12 @@ class SubprocVecEnv(ShareVecEnv):
             p.join()
         self.closed = True
 
+    def get_state(self):
+        for remote in self.remotes:
+            remote.send(('get_state', None))
+        states = [remote.recv() for remote in self.remotes]
+        return np.stack(states)
+
     def render(self, mode="rgb_array"):
         for remote in self.remotes:
             remote.send(('render', mode))
@@ -324,6 +335,11 @@ def shareworker(remote, parent_remote, env_fn_wrapper):
                 remote.send(fr)
             elif data == "human":
                 env.render(mode=data)
+
+        elif cmd == 'get_state':
+            state = env.get_state()
+            remote.send(state)
+
         elif cmd == 'close':
             env.close()
             remote.close()
@@ -410,6 +426,10 @@ def choosesimpleworker(remote, parent_remote, env_fn_wrapper):
         elif cmd == 'reset_task':
             ob = env.reset_task()
             remote.send(ob)
+        elif cmd == 'get_state':
+            state = env.get_state()
+            remote.send(state)
+
         elif cmd == 'close':
             env.close()
             remote.close()
@@ -508,6 +528,10 @@ def chooseworker(remote, parent_remote, env_fn_wrapper):
             env.close()
             remote.close()
             break
+        elif cmd == 'get_state':
+            state = env.get_state()
+            remote.send(state)
+
         elif cmd == 'render':
             remote.send(env.render(mode='rgb_array'))
         elif cmd == 'get_spaces':
@@ -668,6 +692,12 @@ class DummyVecEnv(ShareVecEnv):
 
     def step_async(self, actions):
         self.actions = actions
+        
+    def get_state(self):
+        for remote in self.remotes:
+            remote.send(('get_state', None))
+        states = [remote.recv() for remote in self.remotes]
+        return np.stack(states)
 
     def step_wait(self):
         results = [env.step(a) for (a, env) in zip(self.actions, self.envs)]
@@ -700,6 +730,8 @@ class DummyVecEnv(ShareVecEnv):
                 env.render(mode=mode)
         else:
             raise NotImplementedError
+    
+
 
 
 

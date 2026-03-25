@@ -56,13 +56,7 @@ def parse_args(args, parser):
     parser.add_argument('--scenario_name', type=str,
                         default='TargetedTracking', help="Which scenario to run on")
     parser.add_argument("--num_landmarks", type=int, default=3)
-    parser.add_argument('--num_agents', type=int,
-                        default=2, help="number of players")
-    
-    # 2. THÊM ARGUMENTS CHO DIAYN
-    parser.add_argument('--num_skills', type=int, default=128, help="Number of skills for DIAYN")
-    parser.add_argument('--diayn_alpha', type=float, default=0.1, help="Intrinsic reward coefficient")
-
+    parser.add_argument("--num_agents", type=int, default=4)
     all_args = parser.parse_known_args(args)[0]
 
     return all_args

@@ -124,7 +124,7 @@ class R_MAPPOPolicy:
         intrinsic_reward = skill_log_prob - log_prior
             
         # 4. Trả về Numpy Array cho Runner xử lý tiếp
-        return intrinsic_reward.unsqueeze(-1).detach().cpu().numpy(), rnn_states_discriminator.detach().cpu().numpy()
+        return intrinsic_reward.unsqueeze(-1), rnn_states_discriminator
     
     def evaluate_actions(self, cent_obs, obs, z_onehot, rnn_states_actor, rnn_states_critic, action, masks,
                          available_actions=None, active_masks=None):

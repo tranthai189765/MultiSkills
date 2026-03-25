@@ -29,7 +29,7 @@ class R_Actor(nn.Module):
         self._recurrent_N = args.recurrent_N
         self.tpdv = dict(dtype=torch.float32, device=device)
 
-        obs_shape = get_shape_from_obs_space(obs_space)
+        obs_shape = list(get_shape_from_obs_space(obs_space)) 
         obs_shape[0] += self.num_skills
         
         base = CNNBase if len(obs_shape) == 3 else MLPBase
@@ -136,7 +136,7 @@ class R_Critic(nn.Module):
         init_method = [nn.init.xavier_uniform_, nn.init.orthogonal_][self._use_orthogonal]
         self.num_skills = num_skills
 
-        cent_obs_shape = get_shape_from_obs_space(cent_obs_space)
+        cent_obs_shape = list(get_shape_from_obs_space(cent_obs_space))
         cent_obs_shape[0] += self.num_skills
         
         base = CNNBase if len(cent_obs_shape) == 3 else MLPBase

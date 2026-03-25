@@ -84,7 +84,7 @@ def normalize_state_optimized(s, num_cameras, num_targets, num_obstacles):
 class MATEEnv(gym.Env):
     def __init__(self, config):
         super().__init__()
-        levels = config["levels"]
+        levels = config.levels
         base_env = mate.make("MultiAgentTracking-v0")
         base_env = mate.DiscreteCamera(base_env, levels=levels)
         base_env = mate.MultiCamera(
@@ -109,22 +109,21 @@ class MATEEnv(gym.Env):
         flat_obs = [o.flatten() for o in obs]
         self.obs_shape = max(o.shape[0] for o in flat_obs)
         #print("obs_shape =", self.obs_shape)
-        self.state_shape = self.get_state().shape[0]
-        self.observation_space = spaces.Box(
-            low=-1.0,
-            high=+1.0,
-            shape=(self.n_agents, self.obs_shape),
-            dtype=np.float32
-        )
-        self.state_space = spaces.Box(
-            low=-1.0,
-            high=+1.0,
-            shape=(self.state_shape,),
-            dtype=np.float32
-        )
-        self.action_space = spaces.MultiDiscrete(
-            [self.n_actions] * self.n_agents
-        )
+        self.state_shape = self.get_state()[0].shape[0]
+        self.observation_space = [
+            spaces.Box(low=-1.0, high=+1.0, shape=(self.obs_shape,), dtype=np.float32) 
+            for _ in range(self.n_agents)
+        ]
+        
+        # 2. Share observation space (Global State): Cũng là LIST chứa Box cho từng agent
+        self.share_observation_space = [
+            spaces.Box(low=-1.0, high=+1.0, shape=(self.state_shape,), dtype=np.float32) 
+            for _ in range(self.n_agents)
+        ]
+        self.action_space = [
+            spaces.Discrete(self.n_actions) 
+            for _ in range(self.n_agents)
+        ]
 
         self.t = 0
 
@@ -140,6 +139,8 @@ class MATEEnv(gym.Env):
     def step(self, actions):
         reward_n = []
         done_n = []
+        #print("actions = ", actions)
+        #print("actions.shape = ", actions.shape)
         if hasattr(actions, "cpu"):
             actions = actions.cpu().numpy()
 
@@ -178,9 +179,6 @@ class MATEEnv(gym.Env):
         return self.obs_shape
 
     def get_state(self):
-        import inspect
-        print(inspect.getfile(self.env.get_real_opponent_info))
-        #time.sleep(1000)
         obs = self.last_obs
         camera_state = []
         for o in obs:
@@ -194,7 +192,9 @@ class MATEEnv(gym.Env):
             axis=0
         )
         normalized_state = normalize_state_optimized(s=state, num_cameras=self.n_agents, num_targets=self.n_targets, num_obstacles=self.n_obstacles)
-        return normalized_state.astype(np.float32)
+        single_state = normalized_state.astype(np.float32)
+        state_n = [single_state for _ in range(self.n_agents)]
+        return state_n
 
     def get_state_size(self):
         return self.state_shape
@@ -273,7 +273,7 @@ if __name__ == "__main__":
 
             actions.append(action)
 
-        reward, done, info = env.step(actions)
+        next_obs, reward, done, info = env.step(actions)
 
         obs = env.get_obs()
         state = env.get_state()

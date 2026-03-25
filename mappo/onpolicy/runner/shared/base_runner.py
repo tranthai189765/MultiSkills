@@ -21,8 +21,8 @@ class Runner(object):
         self.eval_envs = config['eval_envs']
         self.device = config['device']
         self.num_agents = config['num_agents']
-        self.num_skills = config['num_skills']
-        self.diayn_alpha = config['diayn_alpha']
+        self.num_skills = self.all_args.num_skills
+        self.diayn_alpha = self.all_args.diayn_alpha
         if config.__contains__("render_envs"):
             self.render_envs = config['render_envs']       
 
@@ -115,7 +115,9 @@ class Runner(object):
     def compute(self):
         """Calculate returns for the collected data."""
         self.trainer.prep_rollout()
+        #    def get_values(self, cent_obs, z_onehot, rnn_states_critic, masks):
         next_values = self.trainer.policy.get_values(np.concatenate(self.buffer.share_obs[-1]),
+                                                np.concatenate(self.buffer.z_onehot[-1]),
                                                 np.concatenate(self.buffer.rnn_states_critic[-1]),
                                                 np.concatenate(self.buffer.masks[-1]))
         next_values = np.array(np.split(_t2n(next_values), self.n_rollout_threads))
